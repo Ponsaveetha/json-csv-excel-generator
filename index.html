@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Spring Test Data Generator</title>
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://kit.fontawesome.com/a2e0a3a3a5.js" crossorigin="anonymous"></script>
+</head>
+<body class="bg-light">
+<div class="container py-4">
+
+    <h3 class="text-primary fw-bold mb-3">Import / Generate Data</h3>
+
+    <!-- Import Section -->
+    <form id="importForm" method="post" enctype="multipart/form-data" class="mb-3">
+        <div class="d-flex align-items-center gap-2">
+            <input type="file" name="file" id="fileInput" class="form-control w-auto">
+            <button type="button" id="importBtn" class="btn btn-secondary">Import</button>
+        </div>
+    </form>
+
+    <!-- Header Input -->
+    <div class="mb-3">
+        <label class="form-label">Comma-separated headers</label>
+        <input type="text" id="headersInput" class="form-control" placeholder="Name, Email, Age">
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Number of Rows</label>
+        <input type="number" id="rowCount" class="form-control w-25" value="5" min="1">
+    </div>
+
+    <!-- Add header and attribute buttons -->
+    <div class="d-flex gap-2 mb-4">
+        <button class="btn btn-primary" id="generateBtn">Generate</button>
+        <button class="btn btn-outline-success" id="addHeaderBtn">Add Header</button>
+        <button class="btn btn-outline-info" id="addAttributeBtn">Add Attribute</button>
+    </div>
+
+    <!-- Dynamic header and attribute lists -->
+    <div class="mb-4">
+        <strong>Current Headers:</strong>
+        <ul id="headerUl" class="list-group mt-2"></ul>
+
+        <strong class="mt-3 d-block">Current Attributes:</strong>
+        <ul id="attributeUl" class="list-group mt-2"></ul>
+    </div>
+
+    <hr>
+    <h3 class="text-primary fw-bold mb-3">Generated / Imported Data</h3>
+
+    <!-- Data Table -->
+    <form id="dataForm">
+        <table id="dataTable" class="table table-bordered table-striped">
+            <thead class="table-primary">
+            <tr id="headerRow"></tr>
+            </thead>
+            <tbody id="dataBody"></tbody>
+        </table>
+
+        <div class="d-flex gap-2 mb-4">
+            <button type="button" class="btn btn-primary" id="saveBtn">
+                <i class="fas fa-save"></i> Save Changes
+            </button>
+            <button type="button" class="btn btn-outline-primary" id="addRowBtn">
+                <i class="fas fa-plus"></i> Add Row
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="addColumnBtn">
+                <i class="fas fa-plus"></i> Add Column
+            </button>
+        </div>
+    </form>
+
+    <hr>
+    <h3 class="text-primary fw-bold mb-3">Export Options</h3>
+
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-dark" id="exportJson">Export JSON</button>
+        <button class="btn btn-outline-dark" id="exportCsv">Export CSV</button>
+        <button class="btn btn-outline-dark" id="exportExcel">Export Excel</button>
+    </div>
+
+</div>
+
+<script>
+    let headers = [];
+    let attributes = [];
+    let data = [];
+
+    // Add header
+    document.getElementById('addHeaderBtn').addEventListener('click', () => {
+        const input = prompt("Enter new header name:");
+        if (input && !headers.includes(input)) {
+            headers.push(input);
+            updateHeaderList();
+        }
+    });
+
+    function updateHeaderList() {
+        const ul = document.getElementById('headerUl');
+        ul.innerHTML = '';
+        headers.forEach(h => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-center';
+            li.innerHTML = `${h} <button class='btn btn-sm btn-danger' onclick='removeHeader("${h}")'>x</button>`;
+            ul.appendChild(li);
+        });
+    }
+
+    function removeHeader(header) {
+        headers = headers.filter(h => h !== header);
+        updateHeaderList();
+    }
+
+    // Add attribute
+    document.getElementById('addAttributeBtn').addEventListener('click', () => {
+        const input = prompt("Enter attribute name:");
+        if (input && !attributes.includes(input)) {
+            attributes.push(input);
+            updateAttributeList();
+        }
+    });
+
+    function updateAttributeList() {
+        const ul = document.getElementById('attributeUl');
+        ul.innerHTML = '';
+        attributes.forEach(a => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-center';
+            li.innerHTML = `${a} <button class='btn btn-sm btn-danger' onclick='removeAttribute("${a}")'>x</button>`;
+            ul.appendChild(li);
+        });
+    }
+
+    function removeAttribute(attribute) {
+        attributes = attributes.filter(a => a !== attribute);
+        updateAttributeList();
+    }
+
+    // Generate data
+    document.getElementById('generateBtn').addEventListener('click', async () => {
+        const headerInput = document.getElementById('headersInput').value.trim();
+        const rowCount = parseInt(document.getElementById('rowCount').value) || 5;
+        const allHeaders = [...headers, ...headerInput.split(',').map(h => h.trim()).filter(Boolean), ...attributes];
+
+        if (allHeaders.length === 0) {
+            alert("Please add at least one header or attribute!");
+            return;
+        }
+
+        const response = await fetch('/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({headers: allHeaders, rowCount})
+        });
+
+        data = await response.json();
+        renderTable();
+    });
+
+    // Import file
+    document.getElementById('importBtn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('fileInput');
+        if (!fileInput.files.length) {
+            alert("Please select a file to import!");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        const response = await fetch('/import', {
+            method: 'POST',
+            body: formData
+        });
+
+        data = await response.json();
+        renderTable();
+    });
+
+    // Render data table
+    function renderTable() {
+        if (!data.length) return;
+
+        const headerRow = document.getElementById('headerRow');
+        const dataBody = document.getElementById('dataBody');
+        headerRow.innerHTML = '';
+        dataBody.innerHTML = '';
+
+        const headersList = Object.keys(data[0]);
+
+        headersList.forEach(header => {
+            const th = document.createElement('th');
+            th.textContent = header;
+            headerRow.appendChild(th);
+        });
+
+        data.forEach(row => {
+            const tr = document.createElement('tr');
+            headersList.forEach(header => {
+                const td = document.createElement('td');
+                td.contentEditable = true;
+                td.textContent = row[header];
+                tr.appendChild(td);
+            });
+            dataBody.appendChild(tr);
+        });
+    }
+
+    // Add row
+    document.getElementById('addRowBtn').addEventListener('click', () => {
+        if (data.length === 0 && headers.length === 0) return;
+        const row = {};
+        const keys = data.length ? Object.keys(data[0]) : headers;
+        keys.forEach(k => row[k] = '');
+        data.push(row);
+        renderTable();
+    });
+
+    // Add column
+    document.getElementById('addColumnBtn').addEventListener('click', () => {
+        const newHeader = prompt('Enter new column name:');
+        if (!newHeader) return;
+        data.forEach(row => row[newHeader] = '');
+        renderTable();
+    });
+
+    // Export
+    document.getElementById('exportJson').addEventListener('click', () => exportFile('json'));
+    document.getElementById('exportCsv').addEventListener('click', () => exportFile('csv'));
+    document.getElementById('exportExcel').addEventListener('click', () => exportFile('excel'));
+
+    async function exportFile(type) {
+        const response = await fetch(`/export/${type}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const blob = await response.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `data.${type === 'excel' ? 'xlsx' : type}`;
+        a.click();
+    }
+</script>
+</body>
+</html>
